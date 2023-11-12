@@ -1,0 +1,64 @@
+{
+  "name": "test_config",
+  "n_gpu": 1,
+  "preprocessing": {
+    "sr": 16000,
+    "spectrogram": {
+      "type": "MelSpectrogram",
+      "args": {
+      }
+    },
+    "log_spec": true
+  },
+  "arch": {
+    "type": "DeepSpeech2",
+    "args": {
+      "n_feats": 128,
+      "num_rnn_layers": 7,
+      "rnn_hid_size": 512
+    }
+  },
+  "data": {
+    "test": {
+      "batch_size": 30,
+      "num_workers": 5,
+      "datasets": [
+        {
+          "type": "LibrispeechDataset",
+          "args": {
+            "part": "test-other"
+          }
+        }
+      ]
+    }
+  },
+  "metrics": [
+    {
+      "type": "ArgmaxWERMetric",
+      "args": {
+        "name": "WER (argmax)"
+      }
+    },
+    {
+      "type": "ArgmaxCERMetric",
+      "args": {
+        "name": "CER (argmax)"
+      }
+    },
+    {
+      "type": "BeamSearchWERMetric",
+      "args": {
+        "name": "WER (beam search with lm)",
+        "beam_size": 5000,
+        "use_lm": true
+      }
+    }
+  ],
+  "text_encoder": {
+    "type": "CTCCharTextEncoder",
+    "args": {"use_lm": true}
+  },
+  "trainer": {
+    "save_dir": "saved/"
+  }
+}
