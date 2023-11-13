@@ -8,50 +8,47 @@ import torchaudio
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from ss.base.base_text_encoder import BaseTextEncoder
 from ss.utils.parse_config import ConfigParser
 
 logger = logging.getLogger(__name__)
 
 
-class BaseDataset(Dataset):
+class BaseMixtureDataset(Dataset):
     def __init__(
             self,
-            index,
-            text_encoder: BaseTextEncoder,
+            index,  # list of {'mix': path1, 'ref': path2, 'target': path3, (optionally) 'speaker_id': int}
             config_parser: ConfigParser,
             wave_augs=None,
             spec_augs=None,
             limit=None,
-            max_audio_length=None,
-            max_text_length=None,
+            max_audio_length=None
     ):
-        self.text_encoder = text_encoder
         self.config_parser = config_parser
         self.wave_augs = wave_augs
-        self.spec_augs = spec_augs
-        self.log_spec = config_parser["preprocessing"]["log_spec"]
 
-        self._assert_index_is_valid(index)
-        index = self._filter_records_from_dataset(index, max_audio_length, max_text_length, limit)
-        # it's a good idea to sort index by audio length
-        # It would be easier to write length-based batch samplers later
-        index = self._sort_index(index)
+        # self._assert_index_is_valid(index)
+        # index = self._filter_records_from_dataset(index, max_audio_length, limit)
+
+        # index = self._sort_index(index)
         self._index: List[dict] = index
+
+    @property
+    def num_speakers(self):
+        raise NotImplementedError()
 
     def __getitem__(self, ind):
         data_dict = self._index[ind]
-        audio_path = data_dict["path"]
-        audio_wave = self.load_audio(audio_path)
-        audio_wave, audio_spec = self.process_wave(audio_wave)
-        return {
-            "audio": audio_wave,
-            "spectrogram": audio_spec,
-            "duration": audio_wave.size(1) / self.config_parser["preprocessing"]["sr"],
-            "text": data_dict["text"],
-            "text_encoded": self.text_encoder.encode(data_dict["text"]),
-            "audio_path": audio_path,
-        }
+        result = {}
+        if 'speaker_id' in data_dict:
+            result['speaker_id'] = data_dict['speaker_id']
+        for audio in ['mix', 'ref', 'target']:
+            audio_wave = self.load_audio(data_dict[audio])
+            if audio in ['mix', 'ref'] and self.wave_augs is not None:
+                with torch.no_grad():
+                    audio_wave = self.wave_augs(audio_wave)
+            result[audio] = audio_wave
+            result[audio + '_path'] = data_dict[audio]
+        return result
 
     @staticmethod
     def _sort_index(index):
@@ -71,24 +68,6 @@ class BaseDataset(Dataset):
         if sr != target_sr:
             audio_tensor = torchaudio.functional.resample(audio_tensor, sr, target_sr)
         return audio_tensor
-
-    def process_wave(self, audio_tensor_wave: Tensor):
-        '''
-        :return: augmented audio_tensor_wave, augmented audio_tensor_spec
-        '''
-        with torch.no_grad():
-            if self.wave_augs is not None:
-                audio_tensor_wave = self.wave_augs(audio_tensor_wave)
-            wave2spec = self.config_parser.init_obj(
-                self.config_parser["preprocessing"]["spectrogram"],
-                torchaudio.transforms,
-            )
-            audio_tensor_spec = wave2spec(audio_tensor_wave)
-            if self.spec_augs is not None:
-                audio_tensor_spec = self.spec_augs(audio_tensor_spec)
-            if self.log_spec:
-                audio_tensor_spec = torch.log(audio_tensor_spec + 1e-5)
-            return audio_tensor_wave, audio_tensor_spec
 
     @staticmethod
     def _filter_records_from_dataset(

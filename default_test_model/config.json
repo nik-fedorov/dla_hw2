@@ -2,31 +2,38 @@
   "name": "test_config",
   "n_gpu": 1,
   "preprocessing": {
-    "sr": 16000,
-    "spectrogram": {
-      "type": "MelSpectrogram",
-      "args": {
-      }
-    },
-    "log_spec": true
+      "sr": 16000
   },
   "arch": {
-    "type": "DeepSpeech2",
-    "args": {
-      "n_feats": 128,
-      "num_rnn_layers": 7,
-      "rnn_hid_size": 512
-    }
+      "type": "SpExPlus",
+      "args": {
+          "tcn_params": {
+              "n_stacked_tcn": 4,
+              "n_tcn_blocks": 8,
+              "kernel_size": 3,
+              "tcn_dim": 256
+          },
+          "n_resnet_blocks": 3,
+          "resnet_block_dim": 512,
+          "speaker_dim": 256,
+          "num_speakers": 921,
+          "encoder_dim": 256,
+          "L1": 20,
+          "L2": 80,
+          "L3": 160
+      }
   },
   "data": {
     "test": {
-      "batch_size": 30,
-      "num_workers": 5,
+      "batch_size": 4,
+      "num_workers": 8,
       "datasets": [
         {
-          "type": "LibrispeechDataset",
+          "type": "CustomDirMixtureDataset",
           "args": {
-            "part": "test-other"
+            "mix_dir": "data/datasets/test_small/Snr0-lufs20-testSmall/mix",
+            "ref_dir": "data/datasets/test_small/Snr0-lufs20-testSmall/refs",
+            "target_dir": "data/datasets/test_small/Snr0-lufs20-testSmall/targets"
           }
         }
       ]
@@ -34,31 +41,15 @@
   },
   "metrics": [
     {
-      "type": "ArgmaxWERMetric",
-      "args": {
-        "name": "WER (argmax)"
-      }
+      "type": "PESQMetric",
+      "args": {"sr":  16000, "name": "pesq"}
     },
     {
-      "type": "ArgmaxCERMetric",
-      "args": {
-        "name": "CER (argmax)"
-      }
-    },
-    {
-      "type": "BeamSearchWERMetric",
-      "args": {
-        "name": "WER (beam search with lm)",
-        "beam_size": 5000,
-        "use_lm": true
-      }
+      "type": "SISDRMetric",
+      "args": {"name": "sdr"}
     }
   ],
-  "text_encoder": {
-    "type": "CTCCharTextEncoder",
-    "args": {"use_lm": true}
-  },
   "trainer": {
-    "save_dir": "saved/"
+      "save_dir": "saved/"
   }
 }

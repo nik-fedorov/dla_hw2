@@ -1,13 +1,9 @@
-from ss.datasets.custom_audio_dataset import CustomAudioDataset
-from ss.datasets.custom_dir_audio_dataset import CustomDirAudioDataset
-from ss.datasets.librispeech_dataset import LibrispeechDataset
-from ss.datasets.ljspeech_dataset import LJspeechDataset
-from ss.datasets.common_voice import CommonVoiceDataset
+from ss.datasets.custom_mixture_dataset import CustomMixtureDataset
+from ss.datasets.custom_dir_mixture_dataset import CustomDirMixtureDataset
+from ss.datasets.librispeech_mixture_dataset import LibrispeechMixtureDataset
 
 __all__ = [
-    "LibrispeechDataset",
-    "CustomDirAudioDataset",
-    "CustomAudioDataset",
-    "LJspeechDataset",
-    "CommonVoiceDataset"
+    "LibrispeechMixtureDataset",
+    "CustomMixtureDataset",
+    "CustomDirMixtureDataset"
 ]

@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 
+import soundfile as sf
 import torch
 from tqdm import tqdm
 
@@ -17,25 +18,22 @@ from ss.utils.util import MetricTracker
 DEFAULT_CHECKPOINT_PATH = ROOT_PATH / "default_test_model" / "checkpoint.pth"
 
 
-def main(config, out_file):
+def main(config, out_dir):
     logger = config.get_logger("test")
 
     # define cpu or gpu if possible
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # text_encoder
-    text_encoder = config.get_text_encoder()
-
     # define test metrics
-    metrics = [config.init_obj(met, metric_module, text_encoder=text_encoder) for met in config["metrics"]]
+    metrics = [config.init_obj(met, metric_module) for met in config["metrics"]]
     metrics = {met.name: met for met in metrics}
     metric_tracker = MetricTracker(*list(metrics.keys()))
 
     # setup data_loader instances
-    dataloaders = get_dataloaders(config, text_encoder)
+    dataloaders = get_dataloaders(config)
 
     # build model architecture
-    model = config.init_obj(config["arch"], module_model, n_class=len(text_encoder))
+    model = config.init_obj(config["arch"], module_model)
     logger.info(model)
 
     logger.info("Loading checkpoint: {} ...".format(config.resume))
@@ -49,42 +47,22 @@ def main(config, out_file):
     model = model.to(device)
     model.eval()
 
-    results = []
-
+    sr = config["preprocessing"]["sr"]
     with torch.no_grad():
         for batch_num, batch in enumerate(tqdm(dataloaders["test"])):
             batch = Trainer.move_batch_to_device(batch, device)
             output = model(**batch)
-            if type(output) is dict:
-                batch.update(output)
-            else:
-                batch["logits"] = output
-            batch["log_probs"] = torch.log_softmax(batch["logits"], dim=-1)
-            batch["log_probs_length"] = model.transform_input_lengths(
-                batch["spectrogram_length"]
-            )
-            batch["probs"] = batch["log_probs"].exp().cpu()
-            batch["argmax"] = batch["probs"].argmax(-1)
-            for i in range(len(batch["text"])):
-                argmax = batch["argmax"][i]
-                argmax = argmax[: int(batch["log_probs_length"][i])]
-                results.append(
-                    {
-                        "ground_trurh": batch["text"][i],
-                        "pred_text_argmax": text_encoder.ctc_decode(argmax.cpu().numpy()),
-                        # "pred_text_beam_search": text_encoder.ctc_beam_search(
-                        #     batch["probs"][i], batch["log_probs_length"][i], beam_size=2
-                        # )
-                    }
-                )
+            batch.update(output)
+
+            for mix_path, pred_audio in zip(batch["mix_path"], batch["short"]):
+                filename = mix_path.split('/')[-1].replace('mixed', 'separated')
+                sf.write(str(Path(out_dir) / filename), pred_audio.cpu(), sr)
 
             for name, met in metrics.items():
-                metric_tracker.update(name, met(**batch), len(batch["text"]))
+                metric_tracker.update(name, met(**batch).item(), len(batch["short"]))
 
-    results.append(metric_tracker.result())
-
-    with Path(out_file).open("w") as f:
-        json.dump(results, f, indent=2)
+    with (Path(out_dir) / 'metrics.json').open("w") as f:
+        json.dump(metric_tracker.result(), f, indent=2)
 
 
 if __name__ == "__main__":
@@ -113,9 +91,9 @@ if __name__ == "__main__":
     args.add_argument(
         "-o",
         "--output",
-        default="output.json",
+        default="output",
         type=str,
-        help="File to write results (.json)",
+        help="Directory to write results",
     )
     args.add_argument(
         "-t",
@@ -127,7 +105,7 @@ if __name__ == "__main__":
     args.add_argument(
         "-b",
         "--batch-size",
-        default=20,
+        default=2,
         type=int,
         help="Test dataset batch size",
     )
@@ -166,12 +144,11 @@ if __name__ == "__main__":
                 "num_workers": args.jobs,
                 "datasets": [
                     {
-                        "type": "CustomDirAudioDataset",
+                        "type": "CustomDirMixtureDataset",
                         "args": {
-                            "audio_dir": str(test_data_folder / "audio"),
-                            "transcription_dir": str(
-                                test_data_folder / "transcriptions"
-                            ),
+                            "mix_dir": str(test_data_folder / "mix"),
+                            "ref_dir": str(test_data_folder / "refs"),
+                            "target_dir": str(test_data_folder / "targets")
                         },
                     }
                 ],

@@ -58,6 +58,13 @@ def prepare_device(n_gpu_use):
     return device, list_ids
 
 
+def mask_sequences(x, lengths):
+    out = torch.zeros_like(x)
+    for idx, length in enumerate(lengths):
+        out[idx, :length] = x[idx, :length]
+    return out
+
+
 class MetricTracker:
     def __init__(self, *keys, writer=None):
         self.writer = writer

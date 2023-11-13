@@ -12,31 +12,25 @@ def collate_fn(dataset_items: List[dict]):
     """
     assert len(dataset_items) > 0
 
-    result_batch = dict()
+    result_batch = {}
 
-    result_batch["audio"] = [item["audio"] for item in dataset_items]
-    result_batch["duration"] = [item["duration"] for item in dataset_items]
-    result_batch["text"] = [item["text"] for item in dataset_items]
-    result_batch["audio_path"] = [item["audio_path"] for item in dataset_items]
+    mix_lengths, ref_lengths = [], []
+    for item in dataset_items:
+        mix_lengths.append(item['mix'].size(1))
+        ref_lengths.append(item['ref'].size(1))
+    result_batch['mix_lengths'] = torch.tensor(mix_lengths)
+    result_batch['ref_lengths'] = torch.tensor(ref_lengths)
 
-    spectrogram_length = [item["spectrogram"].size(2) for item in dataset_items]
-    result_batch["spectrogram_length"] = torch.tensor(spectrogram_length)
+    max_mix_len, max_ref_len = max(mix_lengths), max(ref_lengths)
+    for key, max_len in zip(['mix', 'ref', 'target'], [max_mix_len, max_ref_len, max_mix_len]):
+        result_batch[key] = torch.zeros(len(dataset_items), max_len)
+        for idx, item in enumerate(dataset_items):
+            result_batch[key][idx, :item[key].size(1)] = item[key].squeeze(0)
 
-    text_encoded_length = [item["text_encoded"].size(1) for item in dataset_items]
-    result_batch["text_encoded_length"] = torch.tensor(text_encoded_length)
+    for key in ['mix_path', 'ref_path', 'target_path']:
+        result_batch[key] = [item[key] for item in dataset_items]
 
-    batch_size = len(dataset_items)
-    spec_n_freq = dataset_items[0]["spectrogram"].size(1)
-    max_spec_len = max(spectrogram_length)
-    spectrogram = torch.full((batch_size, spec_n_freq, max_spec_len), 0.0)
-    for i, item in enumerate(dataset_items):
-        spectrogram[i, :, :spectrogram_length[i]] = item["spectrogram"]
-    result_batch["spectrogram"] = spectrogram
-
-    max_text_len = max(text_encoded_length)
-    text_encoded = torch.full((batch_size, max_text_len), 0, dtype=torch.long)
-    for i, item in enumerate(dataset_items):
-        text_encoded[i, :text_encoded_length[i]] = item["text_encoded"]
-    result_batch["text_encoded"] = text_encoded
+    if 'speaker_id' in dataset_items[0]:
+        result_batch['speaker_id'] = torch.tensor([item['speaker_id'] for item in dataset_items])
 
     return result_batch

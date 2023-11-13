@@ -1,7 +1,6 @@
-from ss.model.baseline_model import BaselineModel
-from ss.model.deep_speech2 import DeepSpeech2
+from ss.model.spex_model import SpExPlus
+
 
 __all__ = [
-    "BaselineModel",
-    "DeepSpeech2",
+    "SpExPlus",
 ]
