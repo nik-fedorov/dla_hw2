@@ -1,4 +1,4 @@
-# ASR project barebones
+# Speaker separation pipeline
 
 ## Report
 
